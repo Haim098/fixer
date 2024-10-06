@@ -1,0 +1,5 @@
+PySide6
+pyperclip
+keyboard
+pyinstaller
+Pillow
