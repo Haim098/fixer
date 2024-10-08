@@ -4,58 +4,51 @@ from ui.main_window import MainWindow
 from clipboard_manager import ClipboardManager
 from settings_manager import SettingsManager
 import keyboard
-from converter.engine import convert_text_accurate, detect_language
-import pyperclip
-from PySide6.QtCore import QSettings, QCoreApplication
+from PySide6.QtCore import QSettings
 from autostart_utils import toggle_autostart
-import time
-from PySide6.QtGui import QShortcut, QKeySequence, QIcon
+from PySide6.QtGui import QIcon
 from ui.system_tray import SystemTray
+from ui.suggestion_dialog import SuggestionDialog
+import ast
 
-original_clipboard = ""
+clipboard_manager = None
+current_word = ""
 
-def smart_convert_and_paste():
-    global original_clipboard
-    print("smart_convert_and_paste triggered")
-    
-    # קבלת הטקסט הנוכחי מהלוח
-    text = pyperclip.paste()
-    print(f"Text to convert: '{text}'")
-    
-    if text and text.strip():  # בדיקה שהטקסט לא ריק
-        original_clipboard = text
-        direction = detect_language(text)
-        converted = convert_text_accurate(text, direction)
-        print(f"Converted text: '{converted}'")
-        
-        if converted != text:  # בדיקה שהטקסט אכן השתנה
-            pyperclip.copy(converted)
-            print("Text converted and copied to clipboard")
-            
-            # הדבקת הטקסט המומר
-            time.sleep(0.1)  # המתנה קצרה לפני ההדבקה
-            keyboard.send('ctrl+v')
-            print("Converted text pasted")
-        else:
-            print("Text didn't change after conversion")
+def on_key_event(e):
+    global current_word
+    if e.event_type == keyboard.KEY_DOWN:
+        if e.name == "space" or e.name == "enter":
+            if current_word:
+                clipboard_manager.check_and_suggest_word(current_word)
+                current_word = ""
+        elif e.name == "backspace":
+            current_word = current_word[:-1]
+        elif len(e.name) == 1:  # אם זה תו בודד
+            current_word += e.name
+
+def show_suggestion_dialog(original_text, suggestions):
+    print(f"Showing suggestion dialog for: {original_text}")
+    print(f"Suggestions: {suggestions}")
+    dialog = SuggestionDialog(original_text, ast.literal_eval(suggestions))
+    if dialog.exec_():
+        final_text = dialog.get_selected_text()
+        print(f"User accepted suggestions. Final text: {final_text}")
+        keyboard.write(final_text)
     else:
-        print("No text to convert or text is empty")
-
-def restore_original_clipboard():
-    global original_clipboard
-    if original_clipboard:
-        pyperclip.copy(original_clipboard)
-        print(f"Restored original text to clipboard: '{original_clipboard}'")
-    else:
-        print("No original text to restore")
+        print("User rejected suggestions")
 
 def main():
+    global clipboard_manager
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     
     settings = QSettings("YourCompany", "KeyboardFixer")
     settings_manager = SettingsManager(settings)
     clipboard_manager = ClipboardManager("ltr")
+    clipboard_manager.suggestion_needed.connect(show_suggestion_dialog)
+    
+    # הוספת מעקב אחר הקלדות
+    keyboard.hook(on_key_event)
     
     main_window = MainWindow(clipboard_manager, settings_manager)
     
@@ -65,16 +58,8 @@ def main():
     autostart = settings.value("autostart", False, type=bool)
     toggle_autostart(autostart)
     
-    # Set up global hotkeys
-    keyboard.add_hotkey('ctrl+shift+v', smart_convert_and_paste, suppress=True)
-    keyboard.add_hotkey('ctrl+shift+b', restore_original_clipboard, suppress=True)
-    
     system_tray.show()
     
-    # Add a global shortcut for quitting the application
-    shortcut = QShortcut(QKeySequence("Ctrl+Q"), main_window)
-    shortcut.activated.connect(system_tray.exit_app)
-
     # יצירת אייקון למגש המערכת
     icon = QIcon("resources/icon128.ico")
     tray = QSystemTrayIcon(icon, app)

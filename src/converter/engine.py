@@ -1,3 +1,5 @@
+from langdetect import detect
+
 def convert_text(text, direction):
     print(f"Converting text: {text}, direction: {direction}")  # הדפסת דיבאג
     hebrew_to_english = str.maketrans("אבגדהוזחטיכלמנסעפצקרשתםןץףך", "abgdhvzhtyklmnspzqrstmnzfpk")
@@ -11,19 +13,7 @@ def convert_text(text, direction):
         return text.translate(hebrew_to_english)
 
 def detect_language(text):
-    print(f"Detecting language for: {text}")  # הדפסת דיבאג
-    hebrew_chars = set('אבגדהוזחטיכלמנסעפצקרשתםןץףך')
-    english_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
-    
-    hebrew_count = sum(1 for char in text if char in hebrew_chars)
-    english_count = sum(1 for char in text if char in english_chars)
-    
-    print(f"Hebrew count: {hebrew_count}, English count: {english_count}")  # הדפסת דיבאג
-    
-    if hebrew_count > english_count:
-        return "ltr"  # מעברית לאנגלית
-    else:
-        return "rtl"  # מאנגלית לעברית
+    return detect(text)
 
 # מיפוי מדויק יותר
 QWERTY_TO_HEBREW = {

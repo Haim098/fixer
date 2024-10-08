@@ -3,3 +3,6 @@ pyperclip
 keyboard
 pyinstaller
 Pillow
+Cython
+langdetect
+pyspellchecker
