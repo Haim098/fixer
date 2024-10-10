@@ -1,9 +1,8 @@
 import re
 import logging
 from PySide6.QtCore import QObject, Signal
-from converter.engine import convert_with_punctuation
 from language_utils import detect_language_accurately, is_valid_word
-from keyboard_state import KeyboardState
+from converter.engine import convert_with_punctuation
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -15,6 +14,8 @@ class ClipboardManager(QObject):
         super().__init__()
         self.hebrew_words = set()
         self.load_hebrew_words()
+        self.word_buffer = []
+        self.valid_word_count = 0
 
     def load_hebrew_words(self):
         try:
@@ -34,21 +35,28 @@ class ClipboardManager(QObject):
         detected_lang = detect_language_accurately(word)
         logging.info(f"Detected language: {detected_lang}")
 
-        suggestions = {}
+        is_valid_in_typed_lang = is_valid_word(word, keyboard_lang)
+        converted_word = convert_with_punctuation(word, 'rtl' if keyboard_lang == 'en' else 'ltr')
+        is_valid_in_other_lang = is_valid_word(converted_word, 'he' if keyboard_lang == 'en' else 'en')
 
-        if keyboard_lang == 'en':
-            converted_word = convert_with_punctuation(word, 'rtl')
-            if is_valid_word(converted_word, 'he'):
-                suggestions[word] = [converted_word]
-                logging.info(f"Suggestion found: '{word}' -> '{converted_word}' (Hebrew)")
-        elif keyboard_lang == 'he':
-            converted_word = convert_with_punctuation(word, 'ltr')
-            if is_valid_word(converted_word, 'en'):
-                suggestions[word] = [converted_word]
-                logging.info(f"Suggestion found: '{word}' -> '{converted_word}' (English)")
-
-        if suggestions:
-            logging.info(f"Suggestions: {suggestions}")
-            self.suggestion_needed.emit(word, str(suggestions))
+        if is_valid_in_typed_lang:
+            self.reset_buffer()
         else:
-            logging.info(f"No suggestions found for word: '{word}'")
+            self.word_buffer.append((word, converted_word))
+            if is_valid_in_other_lang:
+                self.valid_word_count += 1
+
+        if self.valid_word_count >= 3:
+            self.suggest_corrections()
+        elif len(self.word_buffer) >= 10:  # הגבלת גודל הבאפר למניעת צריכת זיכרון מוגזמת
+            self.reset_buffer()
+
+    def reset_buffer(self):
+        self.word_buffer.clear()
+        self.valid_word_count = 0
+
+    def suggest_corrections(self):
+        suggestions = {original: [converted] for original, converted in self.word_buffer}
+        original_text = ' '.join(word for word, _ in self.word_buffer)
+        self.suggestion_needed.emit(original_text, str(suggestions))
+        self.reset_buffer()
